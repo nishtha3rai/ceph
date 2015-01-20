@@ -1144,6 +1144,25 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   // clean up request
   mdcache->request_finish(mdr);
 
+  dout(10) << __func__ << ": finished request, examining tracei" << dendl;
+  if (tracei) {
+    dout(10) << "  tracei: " << *tracei << dendl;
+    if (tracei->get_parent_dn()) {
+      dout(10) << "  tracei parent dn: " << *(tracei->get_parent_dn()) << dendl;
+      dout(10) << "  tracei is remote: " << tracei->get_parent_dn()->get_projected_linkage()->is_remote() << dendl;
+
+    } else {
+      dout(10) << "  tracei no parent dn" << dendl;
+    }
+  } else {
+    dout(10) << "  tracei not set" << dendl;
+  }
+
+  if (tracedn) {
+    dout(10) << "  tracedn: " << *tracedn << dendl;
+    dout(10) << "  tracedn remote: " << tracedn->get_projected_linkage()->is_remote() << dendl;
+  }
+
   // take a closer look at tracei, if it happens to be a remote link
   if (tracei && 
       tracedn &&
@@ -5362,8 +5381,11 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   dn->get_dir()->try_remove_unlinked_dn(dn);
 
   // clean up?
-  if (straydn)
-    mdcache->eval_stray(straydn);
+  if (straydn) {
+    // Tip off the MDCache that this dentry is a stray that
+    // might be elegible for purge.
+    mdcache->notify_stray(straydn);
+  }
 }
 
 bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, CDentry *dn, CDentry *straydn)
@@ -6197,8 +6219,9 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
     mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   // clean up?
-  if (straydn) 
-    mdcache->eval_stray(straydn);
+  if (straydn) {
+    mdcache->notify_stray(straydn);
+  }
 }
 
 
@@ -6706,6 +6729,20 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     } else {
       // FIXME: fix up snaprealm!
     }
+  }
+
+  if (srcdn->get_dir()->inode->is_stray() &&
+      srcdn->get_dir()->inode->get_stray_owner() == mds->whoami) {
+    // A reintegration event or a migration away from me
+    dout(20) << __func__ << ": src dentry was a stray, updating stats" << dendl;
+    mdcache->notify_stray_removed();
+  }
+
+  if (destdn->get_dir()->inode->is_stray() &&
+      destdn->get_dir()->inode->get_stray_owner() == mds->whoami) {
+    // A stray migration (to me)
+    dout(20) << __func__ << ": dst dentry was a stray, updating stats" << dendl;
+    mdcache->notify_stray_created();
   }
 
   // src
