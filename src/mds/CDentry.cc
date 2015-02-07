@@ -559,3 +559,41 @@ void CDentry::_put()
     }
   }
 }
+
+void CDentry::dump(Formatter *f) const
+{
+  assert(f != NULL);
+
+  filepath path;
+  make_path(path);
+
+  f->dump_string("path", path.get_path());
+  f->dump_int("snap_first", first);
+  f->dump_int("snap_last", last);
+  f->dump_bool("is_auth", is_auth());
+
+  f->open_object_section("replicas");
+  const std::map<mds_rank_t,unsigned>& replicas = get_replicas();
+  for (std::map<mds_rank_t,unsigned>::const_iterator i = replicas.begin();
+       i != replicas.end(); ++i) {
+    std::ostringstream rank_str;
+    rank_str << i->first;
+    f->dump_int(rank_str.str().c_str(), i->second);
+  }
+  f->close_section();
+
+  f->open_array_section("authority");
+  f->dump_int("first", authority().first);
+  f->dump_int("second", authority().second);
+  f->close_section();
+  f->dump_int("replica_nonce", get_replica_nonce());
+
+  f->dump_bool("is_null", get_linkage()->is_null());
+  f->dump_bool("is_remote", get_linkage()->is_remote());
+  f->dump_bool("is_new", is_new());
+
+  f->dump_int("version", get_version());
+  f->dump_int("projected_version", get_projected_version());
+
+  dump_pin_set(f);
+}
