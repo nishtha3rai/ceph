@@ -955,6 +955,7 @@ public:
   }
 
   void print(ostream& out);
+  void dump(Formatter *f) const;
 
   /**
    * @defgroup Scrubbing and fsck
