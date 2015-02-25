@@ -2768,6 +2768,7 @@ void CDir::dump(Formatter *f) const
   }
 
   f->open_array_section("states");
+  MDSCacheObject::dump_states(f);
   if (state_test(CDir::STATE_COMPLETE)) f->dump_string("state", "complete");
   if (state_test(CDir::STATE_FREEZINGTREE)) f->dump_string("state", "freezingtree");
   if (state_test(CDir::STATE_FROZENTREE)) f->dump_string("state", "frozentree");

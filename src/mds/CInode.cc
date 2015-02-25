@@ -3536,8 +3536,6 @@ void InodeStore::dump(Formatter *f) const
 {
   inode.dump(f);
   f->dump_string("symlink", symlink);
-  // FIXME: dirfragtree: dump methods for fragtree_t
-  // FIXME: xattrs: JSON-safe versions of binary xattrs
   f->open_array_section("old_inodes");
   for (compact_map<snapid_t, old_inode_t>::const_iterator i = old_inodes.begin(); i != old_inodes.end(); ++i) {
     f->open_object_section("old_inode");
@@ -3816,6 +3814,39 @@ void CInode::validated_data::dump(Formatter *f) const
 void CInode::dump(Formatter *f) const
 {
   InodeStore::dump(f);
-  dump_pin_set(f);
+
+  MDSCacheObject::dump(f);
+
+  f->open_array_section("states");
+  MDSCacheObject::dump_states(f);
+  if (state_test(STATE_EXPORTING))
+    f->dump_string("state", "exporting");
+  if (state_test(STATE_OPENINGDIR))
+    f->dump_string("state", "openingdir");
+  if (state_test(STATE_FREEZING))
+    f->dump_string("state", "freezing");
+  if (state_test(STATE_FROZEN))
+    f->dump_string("state", "frozen");
+  if (state_test(STATE_AMBIGUOUSAUTH))
+    f->dump_string("state", "ambiguousauth");
+  if (state_test(STATE_EXPORTINGCAPS))
+    f->dump_string("state", "exportingcaps");
+  if (state_test(STATE_NEEDSRECOVER))
+    f->dump_string("state", "needsrecover");
+  if (state_test(STATE_PURGING))
+    f->dump_string("state", "purging");
+  if (state_test(STATE_DIRTYPARENT))
+    f->dump_string("state", "dirtyparent");
+  if (state_test(STATE_DIRTYRSTAT))
+    f->dump_string("state", "dirtyrstat");
+  if (state_test(STATE_STRAYPINNED))
+    f->dump_string("state", "straypinned");
+  if (state_test(STATE_FROZENAUTHPIN))
+    f->dump_string("state", "frozenauthpin");
+  if (state_test(STATE_DIRTYPOOL))
+    f->dump_string("state", "dirtypool");
+  if (state_test(STATE_ORPHAN))
+    f->dump_string("state", "orphan");
+  f->close_section();
 }
 
