@@ -751,11 +751,12 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
  * send it off to a stray directory in another MDS.
  *
  * This is for use:
- *  * Case A: when shutting down a rank we migrate strays
+ *  * Case A: when shutting down a rank, we migrate strays
  *    away from ourselves rather than waiting for purge
- *  * Case B: when we encounter a client backtrace that indicates
- *    a remote inode referring to a stray belonging to
- *    another MDS, we migrate it to ourselves.
+ *  * Case B: when a client request has a trace that refers to
+ *    a stray inode on another MDS, we migrate that inode from
+ *    there to here, in order that we can later re-integrate it
+ *    here.
  *
  * In case B, the receiver should be calling into eval_stray
  * on completion of mv (i.e. inode put), resulting in a subsequent
