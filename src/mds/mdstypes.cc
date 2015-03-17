@@ -1024,8 +1024,8 @@ void MDSCacheObject::dump(Formatter *f) const
   f->dump_bool("is_auth", is_auth());
 
   f->open_object_section("replicas");
-  const std::map<mds_rank_t,unsigned>& replicas = get_replicas();
-  for (std::map<mds_rank_t,unsigned>::const_iterator i = replicas.begin();
+  const compact_map<mds_rank_t,unsigned>& replicas = get_replicas();
+  for (compact_map<mds_rank_t,unsigned>::const_iterator i = replicas.begin();
        i != replicas.end(); ++i) {
     std::ostringstream rank_str;
     rank_str << i->first;
