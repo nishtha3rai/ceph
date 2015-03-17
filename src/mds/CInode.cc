@@ -3532,7 +3532,7 @@ void CInode::decode_import(bufferlist::iterator& p,
 }
 
 
-void InodeStore::dump(Formatter *f) const
+void InodeStoreBase::dump(Formatter *f) const
 {
   inode.dump(f);
   f->dump_string("symlink", symlink);
@@ -3547,6 +3547,10 @@ void InodeStore::dump(Formatter *f) const
     f->close_section();  // old_inode
   }
   f->close_section();  // old_inodes
+
+  f->open_object_section("dirfragtree");
+  dirfragtree.dump(f);
+  f->close_section(); // dirfragtree
 }
 
 
@@ -3813,7 +3817,7 @@ void CInode::validated_data::dump(Formatter *f) const
 
 void CInode::dump(Formatter *f) const
 {
-  InodeStore::dump(f);
+  InodeStoreBase::dump(f);
 
   MDSCacheObject::dump(f);
 
@@ -3847,6 +3851,32 @@ void CInode::dump(Formatter *f) const
     f->dump_string("state", "dirtypool");
   if (state_test(STATE_ORPHAN))
     f->dump_string("state", "orphan");
+  f->close_section();
+
+  f->open_array_section("client_caps");
+  for (map<client_t,Capability*>::const_iterator it = client_caps.begin();
+       it != client_caps.end(); ++it) {
+    f->open_object_section("client_cap");
+    f->dump_int("client_id", it->first.v);
+    f->dump_string("pending", ccap_string(it->second->pending()));
+    f->dump_string("issued", ccap_string(it->second->issued()));
+    f->dump_string("wanted", ccap_string(it->second->wanted()));
+    f->dump_string("last_sent", ccap_string(it->second->get_last_sent()));
+    f->close_section();
+  }
+  f->close_section();
+
+  f->dump_int("loner", loner_cap.v);
+  f->dump_int("want_loner", want_loner_cap.v);
+
+  f->open_array_section("mds_caps_wanted");
+  for (compact_map<int,int>::const_iterator p = mds_caps_wanted.begin();
+       p != mds_caps_wanted.end(); ++p) {
+    f->open_object_section("mds_cap_wanted");
+    f->dump_int("rank", p->first);
+    f->dump_string("cap", ccap_string(p->second));
+    f->close_section();
+  }
   f->close_section();
 }
 

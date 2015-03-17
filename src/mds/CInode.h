@@ -95,6 +95,9 @@ public:
   /* Serialization without ENCODE_START/FINISH blocks for use embedded in dentry */
   void encode_bare(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
   void decode_bare(bufferlist::iterator &bl, bufferlist &snap_blob, __u8 struct_v=5);
+
+  /* For test/debug output */
+  void dump(Formatter *f) const;
 };
 
 class InodeStore : public InodeStoreBase {
@@ -113,8 +116,7 @@ public:
   void decode_bare(bufferlist::iterator &bl) {
     InodeStoreBase::decode_bare(bl, snap_blob);
   }
-  /* For use in debug and ceph-dencoder */
-  void dump(Formatter *f) const;
+
   static void generate_test_instances(std::list<InodeStore*>& ls);
 };
 
