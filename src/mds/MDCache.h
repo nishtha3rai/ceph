@@ -592,10 +592,10 @@ public:
   friend class Locker;
   friend class Migrator;
   friend class MDBalancer;
-  // FIXME hack so that the StrayManager can re-insert inode to inode_map
-  // on abort_queue
-  friend class StrayManager;
 
+  // StrayManager needs to be able to remove_inode() from us
+  // when it is done purging
+  friend class StrayManager;
 
   // File size recovery
 private:
