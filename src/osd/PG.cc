@@ -280,8 +280,12 @@ void PG::proc_master_log(
   peer_info[from] = oinfo;
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
+
+  assert(cct->_conf->osd_find_best_info_ignore_history_les ||
+	 info.last_epoch_started <= oinfo.last_epoch_started);
   info.last_epoch_started = oinfo.last_epoch_started;
   info.history.merge(oinfo.history);
+  assert(info.last_epoch_started >= info.history.last_epoch_started);
 
   peer_missing[from].swap(omissing);
 }
@@ -893,7 +897,8 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
   for (map<pg_shard_t, pg_info_t>::const_iterator i = infos.begin();
        i != infos.end();
        ++i) {
-    if (max_last_epoch_started_found < i->second.history.last_epoch_started) {
+    if (!cct->_conf->osd_find_best_info_ignore_history_les &&
+	max_last_epoch_started_found < i->second.history.last_epoch_started) {
       min_last_update_acceptable = eversion_t::max();
       max_last_epoch_started_found = i->second.history.last_epoch_started;
     }
@@ -920,6 +925,9 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
     // Only consider peers with last_update >= min_last_update_acceptable
     if (p->second.last_update < min_last_update_acceptable)
       continue;
+    // disqualify anyone with the wrong last_epoch_started
+    if (p->second.last_epoch_started != max_last_epoch_started_found)
+      continue;
     // Disquality anyone who is incomplete (not fully backfilled)
     if (p->second.is_incomplete())
       continue;
@@ -927,6 +935,7 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
       best = p;
       continue;
     }
+
     // Prefer newer last_update
     if (pool.info.require_rollback()) {
       if (p->second.last_update > best->second.last_update)
@@ -953,7 +962,8 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
     }
 
     // prefer current primary (usually the caller), all things being equal
-    if (p->first == pg_whoami) {
+    if (p->first == pg_whoami &&
+	!cct->_conf->osd_debug_find_best_info_ignore_primary) {
       dout(10) << "calc_acting prefer osd." << p->first
 	       << " because it is current primary" << dendl;
       best = p;
@@ -1479,10 +1489,15 @@ void PG::activate(ObjectStore::Transaction& t,
 
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
-    if (acting.size() >= pool.info.min_size)
+    if (acting.size() >= pool.info.min_size) {
+      assert(cct->_conf->osd_find_best_info_ignore_history_les ||
+	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
+    }
   } else if (is_acting(pg_whoami)) {
     // update last_epoch_started on acting replica to whatever the primary sent
+    assert(cct->_conf->osd_find_best_info_ignore_history_les ||
+	   info.last_epoch_started <= activation_epoch);
     info.last_epoch_started = activation_epoch;
   }
 
@@ -1844,6 +1859,8 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
       get_osdmap()->get_epoch(),
       info);
 
+    assert(cct->_conf->osd_find_best_info_ignore_history_les ||
+	   i.info.last_epoch_started <= activation_epoch);
     i.info.history.last_epoch_started = activation_epoch;
     if (acting.size() >= pool.info.min_size) {
       state_set(PG_STATE_ACTIVE);
@@ -7327,7 +7344,20 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
     }
 
     // all good!
-    post_event(Activate(pg->get_osdmap()->get_epoch()));
+    if (pg->cct->_conf->osd_debug_delay_activate &&
+        pg->cct->_conf->osd_debug_delay_activate_prob &&
+	((unsigned)(rand() % 100) <
+	 pg->cct->_conf->osd_debug_delay_activate_prob)) {
+      dout(0) << "DEBUG: delaying activation" << dendl;
+      Mutex::Locker l(pg->osd->debug_peering_delay_lock);
+      pg->osd->debug_peering_delay_timer.add_event_after(
+	pg->cct->_conf->osd_debug_delay_activate,
+	new QueuePeeringEvt<Activate>(
+	  pg, pg->get_osdmap()->get_epoch(),
+	  Activate(pg->get_osdmap()->get_epoch())));
+    } else {
+      post_event(Activate(pg->get_osdmap()->get_epoch()));
+    }
   } else {
     pg->publish_stats_to_osd();
   }
@@ -7348,7 +7378,21 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
     } else {
       dout(10) << "Got last missing, don't need missing "
 	       << "posting CheckRepops" << dendl;
-      post_event(Activate(pg->get_osdmap()->get_epoch()));
+      // all good!
+      if (pg->cct->_conf->osd_debug_delay_activate &&
+	  pg->cct->_conf->osd_debug_delay_activate_prob &&
+	  ((unsigned)(rand() % 100) <
+	   pg->cct->_conf->osd_debug_delay_activate_prob)) {
+	dout(0) << "DEBUG: delaying activation" << dendl;
+	Mutex::Locker l(pg->osd->debug_peering_delay_lock);
+	pg->osd->debug_peering_delay_timer.add_event_after(
+	  pg->cct->_conf->osd_debug_delay_activate,
+	  new QueuePeeringEvt<Activate>(
+	    pg, pg->get_osdmap()->get_epoch(),
+	    Activate(pg->get_osdmap()->get_epoch())));
+      } else {
+	post_event(Activate(pg->get_osdmap()->get_epoch()));
+      }
     }
   }
   return discard_event();
@@ -7393,7 +7437,8 @@ void PG::RecoveryState::GetMissing::exit()
 /*------WaitUpThru--------*/
 PG::RecoveryState::WaitUpThru::WaitUpThru(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Peering/WaitUpThru")
+    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Peering/WaitUpThru"),
+    delayed_activation(false)
 {
   context< RecoveryMachine >().log_enter(state_name);
 }
@@ -7401,8 +7446,22 @@ PG::RecoveryState::WaitUpThru::WaitUpThru(my_context ctx)
 boost::statechart::result PG::RecoveryState::WaitUpThru::react(const ActMap& am)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  if (!pg->need_up_thru) {
-    post_event(Activate(pg->get_osdmap()->get_epoch()));
+  if (!delayed_activation && !pg->need_up_thru) {
+    if (pg->cct->_conf->osd_debug_delay_activate &&
+        pg->cct->_conf->osd_debug_delay_activate_prob &&
+	((unsigned)(rand() % 100) <
+	 pg->cct->_conf->osd_debug_delay_activate_prob)) {
+      dout(0) << "DEBUG: delaying activation" << dendl;
+      Mutex::Locker l(pg->osd->debug_peering_delay_lock);
+      pg->osd->debug_peering_delay_timer.add_event_after(
+	pg->cct->_conf->osd_debug_delay_activate,
+	new QueuePeeringEvt<Activate>(
+	  pg, pg->get_osdmap()->get_epoch(),
+	  Activate(pg->get_osdmap()->get_epoch())));
+      delayed_activation = true;
+    } else {
+      post_event(Activate(pg->get_osdmap()->get_epoch()));
+    }
   }
   return forward_event();
 }
