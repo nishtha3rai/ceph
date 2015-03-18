@@ -41,6 +41,8 @@ void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uin
   for (int pos = 0; pos + sizeof(k) <= enc.length(); pos+=sizeof(k), p++)
     k ^= mswab64(*p);
   *key = k;
+
+  ldout(cct, 10) << "cephx_calc_client_server_challenge secret " << secret << " server_challenge " << server_challenge << " client_challenge " << client_challenge << " key " << *key << dendl;
 }
 
 
