@@ -3584,8 +3584,14 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, cur, MAY_WRITE))
-    return;
+  if ((mask & CEPH_ SETATTR_UID) &&
+    (uid != req->head.args.setattr.uid || gid != req->head.args.setattr.gid)) {
+    if (!check_access(mdr, cur, MAY_CHOWN))
+      return;
+  } else {
+    if (!check_access(mdr, cur, MAY_WRITE))
+      return;
+  }
 
   // trunc from bigger -> smaller?
   inode_t *pi = cur->get_projected_inode();
