@@ -2086,12 +2086,23 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack)
  * by mask on the given inode, based on the capability in the mdr's
  * session.
  */
-bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
+bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask, MClientRequest *req=NULL)
 {
   Session *s = mdr->session;
 
-  uid_t uid = mdr->client_request->get_caller_uid();
-  gid_t gid = mdr->client_request->get_caller_gid();
+  if ((mask & MAY_CHOWN) &&
+    (req != NULL)) {
+    uid_t uid = req->head.args.setattr.uid;
+  } else {
+    uid_t uid = mdr->client_request->get_caller_uid();
+  }
+
+  if ((mask & MAY_CHGRP) &&
+    (req != NULL)) {
+    gid_t gid = req->head.args.setattr.gid;
+  } else {
+    gid_t gid = mdr->client_request->get_caller_gid();
+  }
 
   // FIXME: behave with inodes in stray dir
   // FIXME: behave with hard links
@@ -3572,6 +3583,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   }
 
   __u32 mask = req->head.args.setattr.mask;
+  __u32 access_mask = MAY_WRITE;
 
   // xlock inode
   if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID))
@@ -3584,14 +3596,14 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if ((mask & CEPH_ SETATTR_UID) &&
-    (uid != req->head.args.setattr.uid || gid != req->head.args.setattr.gid)) {
-    if (!check_access(mdr, cur, MAY_CHOWN))
-      return;
-  } else {
-    if (!check_access(mdr, cur, MAY_WRITE))
-      return;
-  }
+  if ((mask & CEPH_SETATTR_UID) && (uid != req->head.args.setattr.uid))
+    access_mask |= MAY_CHOWN;
+
+  if ((mask & CEPH_SETATTR_GID) && (gid != req->head.args.setattr.gid))
+    access_mask |= MAY_CHGRP;
+
+  if (!check_access(mdr, cur, access_mask, req))
+    return;
 
   // trunc from bigger -> smaller?
   inode_t *pi = cur->get_projected_inode();

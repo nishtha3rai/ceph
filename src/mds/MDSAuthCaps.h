@@ -28,7 +28,8 @@ enum {
   MAY_WRITE = 2,
   MAY_EXECUTE = 4,
   MAY_CREATE = 8,
-  MAY_CHOWN = 16
+  MAY_CHOWN = 16,
+  MAY_CHGRP = 32
 };
 
 class CephContext;
