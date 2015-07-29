@@ -2090,19 +2090,13 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask, MClientR
 {
   Session *s = mdr->session;
 
-  if ((mask & MAY_CHOWN) &&
-    (req != NULL)) {
-    uid_t uid = req->head.args.setattr.uid;
-  } else {
-    uid_t uid = mdr->client_request->get_caller_uid();
+  if (mask & (MAY_CHOWN|MAY_CHGRP)) {
+    uid_t new_uid = req->head.args.setattr.uid;
+    gid_t new_gid = req->head.args.setattr.gid;
   }
 
-  if ((mask & MAY_CHGRP) &&
-    (req != NULL)) {
-    gid_t gid = req->head.args.setattr.gid;
-  } else {
-    gid_t gid = mdr->client_request->get_caller_gid();
-  }
+  uid_t uid = mdr->client_request->get_caller_uid();
+  gid_t gid = mdr->client_request->get_caller_gid();
 
   // FIXME: behave with inodes in stray dir
   // FIXME: behave with hard links
@@ -2110,6 +2104,13 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask, MClientR
   in->make_path_string(path, false, in->get_projected_parent_dn());
   if (path.length())
     path = path.substr(1);    // drop leading /
+
+  if ((mask & (MAY_CHOWN|MAY_CHGRP)) &&
+    !(s->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+                  new_uid, new_gid, mask))) {
+    respond_to_request(mdr, -EACCES);
+    return false;
+  }
 
   if (s->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
 			      uid, gid, mask)) {
