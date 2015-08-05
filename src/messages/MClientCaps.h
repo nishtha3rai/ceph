@@ -134,6 +134,14 @@ private:
   ~MClientCaps() {}
 
 public:
+  __u32 get_caller_uid() {
+    head.caller_uid;
+  }
+
+  __u32 get_caller_gid() {
+    head.caller_gid;
+  }
+
   const char *get_type_name() const { return "Cfcap";}
   void print(ostream& out) const {
     out << "client_caps(" << ceph_cap_op_name(head.op)
