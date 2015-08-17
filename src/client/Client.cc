@@ -5592,6 +5592,15 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid, bool force)
   return res;
 }
 
+void Client::mark_cap_uid_gid(Inode *in, int uid, int gid) {
+  if (uid < 0) {
+    uid = geteuid();
+    gid = getegid();
+  }
+  in->cap_dirtier_uid = uid;
+  in->cap_dirtier_gid = gid;
+}
+
 int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
 		     Inode **inp)
 {
@@ -5619,6 +5628,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
   if (!mask) {
     // caller just needs us to bump the ctime
     in->ctime = ceph_clock_now(cct);
+    mark_cap_uid_gid(in, uid, gid);
     if (issued & CEPH_CAP_AUTH_EXCL)
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
     else if (issued & CEPH_CAP_FILE_EXCL)
@@ -5632,6 +5642,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
     if (mask & CEPH_SETATTR_MODE) {
       in->ctime = ceph_clock_now(cct);
+      mark_cap_uid_gid(in, uid, gid);
       in->mode = (in->mode & ~07777) | (attr->st_mode & 07777);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
@@ -5639,6 +5650,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
     }
     if (mask & CEPH_SETATTR_UID) {
       in->ctime = ceph_clock_now(cct);
+      mark_cap_uid_gid(in, uid, gid);
       in->uid = attr->st_uid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
@@ -5646,6 +5658,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
     }
     if (mask & CEPH_SETATTR_GID) {
       in->ctime = ceph_clock_now(cct);
+      mark_cap_uid_gid(in, uid, gid);
       in->gid = attr->st_gid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
@@ -5659,6 +5672,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
       if (mask & CEPH_SETATTR_ATIME)
         in->atime = utime_t(stat_get_atime_sec(attr), stat_get_atime_nsec(attr));
       in->ctime = ceph_clock_now(cct);
+      mark_cap_uid_gid(in, uid, gid);
       in->time_warp_seq++;
       mark_caps_dirty(in, CEPH_CAP_FILE_EXCL);
       mask &= ~(CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);

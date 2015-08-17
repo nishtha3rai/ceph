@@ -535,6 +535,7 @@ protected:
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);
+  void mark_cap_uid_gid(Inode *in, int uid, int gid);
   int mark_caps_flushing(Inode *in);
   void flush_caps();
   void flush_caps(Inode *in, MetaSession *session);

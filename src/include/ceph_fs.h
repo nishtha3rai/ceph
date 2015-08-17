@@ -678,6 +678,9 @@ struct ceph_mds_caps {
 	__le64 snap_follows;
 	__le32 snap_trace_len;
 
+    __le32 caller_uid;
+    __le32 caller_gid;
+
 	/* authlock */
 	__le32 uid, gid, mode;
 
